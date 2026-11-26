@@ -2,10 +2,20 @@
 # SISTEMA DE TICKETS - Imagen del backend
 # Build multi-etapa para que la imagen final NO contenga dependencias
 # de desarrollo ni el cache de npm (imagen mas pequena y segura).
+#
+# ORDEN IMPORTANTE: la etapa `production` va AL FINAL a proposito.
+# Cuando nadie indica `--target`, Docker construye la ULTIMA etapa del
+# archivo. Render (y la mayoria de los proveedores) construyen asi, sin
+# argumentos. Si `pruebas` quedara al final, el contenedor desplegado
+# ejecutaria Jest y terminaria: el proveedor lo reporta como
+# "Application exited early".
+#
+#   docker compose up --build          -> production (ultima etapa)
+#   docker build --target pruebas .    -> suite de Jest
 # =====================================================================
 
 # ---------------------------------------------------------------------
-# ETAPA 1: dependencias
+# ETAPA 1: dependencias de produccion
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS dependencias
 
@@ -19,7 +29,37 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ---------------------------------------------------------------------
-# ETAPA 2: produccion
+# ETAPA 2: pruebas (NO forma parte de la imagen de produccion)
+#
+# Sirve para ejecutar la suite SIN tener Node instalado en la maquina, y
+# sin contaminar la imagen de produccion (que sigue sin Jest: las
+# herramientas de desarrollo no viajan a produccion).
+#
+# Como es una etapa independiente, Docker solo la construye si se pide:
+#
+#     docker build --target pruebas -t tickets-backend-pruebas ./backend
+#     docker run --rm tickets-backend-pruebas
+#
+# Esta etapa va ANTES de `production` para que la ultima sea la que se
+# despliega cuando no se especifica `--target`.
+# ---------------------------------------------------------------------
+FROM node:22-alpine AS pruebas
+
+WORKDIR /app
+
+# Aqui SI se instalan las dependencias de desarrollo (jest, supertest).
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+# Se copia todo, incluidos tests/ y jest.config si existiera.
+COPY . .
+
+ENV NODE_ENV=test
+
+CMD ["npx", "jest", "--runInBand", "--detectOpenHandles"]
+
+# ---------------------------------------------------------------------
+# ETAPA 3: produccion (ULTIMA = la que se despliega por defecto)
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS production
 
@@ -59,33 +99,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "src/server.js"]
-
-# ---------------------------------------------------------------------
-# ETAPA 3: pruebas (NO forma parte de la imagen de produccion)
-#
-# Sirve para ejecutar la suite SIN tener Node instalado en la maquina, y
-# sin contaminar la imagen de produccion (que sigue sin Jest: las
-# herramientas de desarrollo no viajan a produccion).
-#
-# Como es una etapa independiente, Docker solo la construye si se pide:
-#
-#     docker build --target pruebas -t tickets-backend-pruebas ./backend
-#     docker run --rm tickets-backend-pruebas
-#
-# El flujo normal (`docker compose up --build`) ignora esta etapa por
-# completo, asi que no afecta al tamano ni al arranque de la aplicacion.
-# ---------------------------------------------------------------------
-FROM node:22-alpine AS pruebas
-
-WORKDIR /app
-
-# Aqui SI se instalan las dependencias de desarrollo (jest, supertest).
-COPY package*.json ./
-RUN npm ci && npm cache clean --force
-
-# Se copia todo, incluidos tests/ y jest.config si existiera.
-COPY . .
-
-ENV NODE_ENV=test
-
-CMD ["npx", "jest", "--runInBand", "--detectOpenHandles"]

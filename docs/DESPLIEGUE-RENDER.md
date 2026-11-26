@@ -205,6 +205,7 @@ profesor: *«que se corra una por una y que todas salgan bien»*.
 
 | Síntoma | Causa | Solución |
 |---|---|---|
+| `Application exited early` en el log, con `Tests: 47 passed` arriba | Render construyó la etapa `pruebas` del Dockerfile porque era la última | La etapa `production` debe ser la última del Dockerfile (ya está corregido; si se reordena, volver a dejarla al final) |
 | El frontend carga en blanco | `VITE_API_URL` mal o CSP bloqueando la API | Revisar la variable y volver a desplegar el frontend (se incrusta en el build) |
 | `502 Bad Gateway` al llamar la API | El backend no arrancó | Ver los logs del servicio en Render |
 | `ECONNREFUSED` a la base | Falta `DB_SSL=true` | Añadir la variable y redesplegar |
