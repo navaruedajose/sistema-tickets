@@ -1,0 +1,40 @@
+# --- Variables de entorno (NUNCA versionar) ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Archivos subidos por usuarios y reportes generados ---
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
+
+# --- Build del frontend ---
+frontend/dist/
+frontend/node_modules/
+
+# --- Resultados de pruebas ---
+coverage/
+k6/resultados/
+*.lcov
+
+# Salida generada por k6/EJECUTAR-CARGA.bat. Se ignora a proposito: es un
+# archivo que se reescribe en cada ejecucion. La evidencia que SI se conserva
+# (y por tanto NO se ignora) son los resumenes medidos y fechados:
+#   k6/resumen-tasa.json   -> escenario de capacidad de escritura
+#   k6/resumen-mixto.json  -> escenario de carga realista
+k6/resumen-final.json
+
+# --- Sistema operativo / editores ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

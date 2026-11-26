@@ -1,0 +1,58 @@
+{
+  "name": "sistema-tickets-backend",
+  "version": "1.0.0",
+  "description": "API REST del Sistema de Tickets (helpdesk) - Node.js + Express + PostgreSQL",
+  "main": "src/server.js",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:seed": "node scripts/seed.js",
+    "db:admin": "node scripts/crear-admin.js",
+    "db:limpiar-pruebas": "node scripts/limpiar-pruebas.js",
+    "test": "jest --runInBand --detectOpenHandles",
+    "test:coverage": "jest --coverage --runInBand"
+  },
+  "keywords": [
+    "helpdesk",
+    "tickets",
+    "express",
+    "postgresql",
+    "rest-api"
+  ],
+  "author": "Equipo de Desarrollo",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.11.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.0",
+    "nodemailer": "^6.9.14",
+    "pdfkit": "^0.15.0",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/server.js"
+    ]
+  }
+}

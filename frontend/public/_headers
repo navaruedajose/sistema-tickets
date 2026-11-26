@@ -1,0 +1,42 @@
+# =====================================================================
+# Cabeceras de seguridad para el despliegue como SITIO ESTATICO.
+#
+# QUE ES ESTE ARCHIVO:
+# el estandar `_headers` que entienden los hosts de sitios estaticos
+# (Netlify, Cloudflare Pages y Render, entre otros). Vite copia todo lo que
+# hay en `public/` a la raiz de `dist/`, asi que este archivo acaba en el
+# resultado de la compilacion sin ninguna configuracion extra.
+#
+# POR QUE HACE FALTA SI YA ESTAN EN nginx.conf:
+# en el despliegue en la nube recomendado (docs/DESPLIEGUE-NUBE.md, topologia
+# A) el frontend NO se sirve con nginx: se sirven archivos estaticos desde el
+# CDN del proveedor. En ese caso nginx no participa y las cabeceras de
+# `frontend/security-headers.conf` NO se envian. Este archivo es su
+# equivalente para esa topologia.
+#
+# ATENCION — DIFERENCIA CLAVE CON LA VERSION DE nginx:
+# en la nube el frontend y la API estan en ORIGENES DISTINTOS. Por eso
+# `connect-src` aqui NO puede ser solo 'self': tiene que incluir el dominio
+# publico del backend, o el navegador bloqueara TODAS las llamadas a la API
+# y la aplicacion se quedara en blanco.
+#
+#   >>> Ya incluye https://*.onrender.com y https://*.up.railway.app, que
+#   >>> cubren cualquier nombre de servicio en Render y Railway sin tener
+#   >>> que editar el archivo al desplegar. Si usas un dominio propio,
+#   >>> anadelo aqui.
+#
+# (En el despliegue con Docker no hace falta tocar nada: alli el frontend y
+#  la API comparten origen a traves del proxy inverso de nginx.)
+# =====================================================================
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.onrender.com https://*.up.railway.app; font-src 'self' data:; connect-src 'self' https://*.onrender.com https://*.up.railway.app; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Permitted-Cross-Domain-Policies: none
+
+# Los archivos de /assets/ llevan un hash en el nombre, asi que se pueden
+# cachear de forma agresiva: si el contenido cambia, cambia el nombre.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,0 +1,36 @@
+# =====================================================================
+# Archivos que NO se envian como contexto de construccion a Docker.
+#
+# IMPORTANTE (build multi-etapa):
+# este archivo controla lo que entra en el CONTEXTO de build, no lo que
+# entra en cada imagen. Que `tests/` este disponible en el contexto NO
+# significa que acabe en la imagen de produccion: la etapa `production`
+# del Dockerfile copia solo `src`, `scripts` y los manifiestos, nunca
+# `tests`. Lo que decide es el COPY de cada etapa.
+#
+# Por eso `tests/` NO aparece en esta lista: la etapa `pruebas` lo
+# necesita para poder ejecutar la suite dentro de Docker.
+# =====================================================================
+
+# Dependencias: se reinstalan dentro de la imagen con `npm ci`.
+node_modules
+npm-debug.log
+
+# Secretos: jamas deben viajar en el contexto de build.
+.env
+.env.*
+!.env.example
+
+# Artefactos de cobertura.
+coverage
+
+# Datos generados en tiempo de ejecucion (se montan como volumenes).
+uploads/*
+reports/*
+
+# Documentacion y metadatos del repositorio.
+*.md
+.git
+.gitignore
+.vscode
+.idea

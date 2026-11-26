@@ -1,0 +1,88 @@
+# =====================================================================
+# SISTEMA DE TICKETS - Imagen del backend
+# Build multi-etapa para que la imagen final NO contenga dependencias
+# de desarrollo ni el cache de npm (imagen mas pequena y segura).
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# ETAPA 1: dependencias
+# ---------------------------------------------------------------------
+FROM node:22-alpine AS dependencias
+
+WORKDIR /app
+
+# Copiamos solo los manifiestos primero: si no cambian, Docker reutiliza
+# la capa de instalacion y el build es mucho mas rapido.
+COPY package*.json ./
+
+# `npm ci` respeta exactamente el package-lock.json (builds reproducibles)
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------------------------------------------------------------------
+# ETAPA 2: produccion
+# ---------------------------------------------------------------------
+FROM node:22-alpine AS production
+
+# tini = manejador de procesos init. Garantiza que SIGTERM llegue a Node
+# y que los procesos zombie se recolecten correctamente.
+RUN apk add --no-cache tini curl
+
+ENV NODE_ENV=production \
+    PORT=4000 \
+    UPLOAD_DIR=/app/uploads \
+    TZ=America/Mexico_City
+
+WORKDIR /app
+
+# Usuario sin privilegios: si alguien compromete el proceso, no es root.
+RUN addgroup -g 1001 -S nodejs && \
+    adduser  -u 1001 -S api -G nodejs
+
+COPY --from=dependencias --chown=api:nodejs /app/node_modules ./node_modules
+COPY --chown=api:nodejs package*.json ./
+COPY --chown=api:nodejs src ./src
+COPY --chown=api:nodejs scripts ./scripts
+
+# Directorios persistentes (se montan como volumen en docker-compose)
+RUN mkdir -p /app/uploads /app/reports && chown -R api:nodejs /app/uploads /app/reports
+
+USER api
+
+EXPOSE 4000
+
+# Healthcheck contra el endpoint de salud del propio servicio.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:4000/api/v1/salud || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "src/server.js"]
+
+# ---------------------------------------------------------------------
+# ETAPA 3: pruebas (NO forma parte de la imagen de produccion)
+#
+# Sirve para ejecutar la suite SIN tener Node instalado en la maquina, y
+# sin contaminar la imagen de produccion (que sigue sin Jest: las
+# herramientas de desarrollo no viajan a produccion).
+#
+# Como es una etapa independiente, Docker solo la construye si se pide:
+#
+#     docker build --target pruebas -t tickets-backend-pruebas ./backend
+#     docker run --rm tickets-backend-pruebas
+#
+# El flujo normal (`docker compose up --build`) ignora esta etapa por
+# completo, asi que no afecta al tamano ni al arranque de la aplicacion.
+# ---------------------------------------------------------------------
+FROM node:22-alpine AS pruebas
+
+WORKDIR /app
+
+# Aqui SI se instalan las dependencias de desarrollo (jest, supertest).
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+# Se copia todo, incluidos tests/ y jest.config si existiera.
+COPY . .
+
+ENV NODE_ENV=test
+
+CMD ["npx", "jest", "--runInBand", "--detectOpenHandles"]

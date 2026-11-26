@@ -1,0 +1,82 @@
+{
+  "escenario": "tasa",
+  "perfil": "local",
+  "urlBase": "http://host.docker.internal:4000/api/v1",
+  "fecha": "2026-09-23T00:19:29.720Z",
+  "rendimiento": {
+    "peticionesTotales": 3560,
+    "duracionPromedioMs": 424.21,
+    "duracionP95Ms": 1478.95,
+    "duracionP99Ms": 12388.98,
+    "duracionMaximaMs": 16202.63
+  },
+  "creacionDeTickets": {
+    "duracionPromedioMs": 144.93,
+    "duracionP95Ms": 1263,
+    "tasaDeAceptacion": 100,
+    "ticketsCreados": 3452
+  },
+  "listadoDeTickets": null,
+  "defensas": {
+    "respuestas429": 0,
+    "respuestas400": 0,
+    "errores5xx": 0
+  },
+  "verificaciones": {
+    "pasaron": 20801,
+    "fallaron": 13
+  },
+  "umbrales": [
+    {
+      "umbral": "http_req_duration p(95)<2500",
+      "estadistico": "p(95)",
+      "valor": 1478.9509,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "http_req_duration p(99)<15000",
+      "estadistico": "p(99)",
+      "valor": 12388.9845,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "http_req_failed rate<0.01",
+      "estadistico": "rate",
+      "valor": 0,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_duracion p(95)<2000",
+      "estadistico": "p(95)",
+      "valor": 1263,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_duracion p(99)<6000",
+      "estadistico": "p(99)",
+      "valor": 1726.45,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_exito rate>0.90",
+      "estadistico": "rate",
+      "valor": 1,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "errores_5xx_total count==0",
+      "estadistico": "count",
+      "valor": 0,
+      "cumple": true,
+      "sinDatos": false
+    }
+  ],
+  "umbralesIncumplidos": 0,
+  "umbralesSinDatos": 0
+}

@@ -1,0 +1,2199 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "name": "Sistema de Tickets - API v1",
+    "description": "# Sistema de Tickets — Colección de pruebas de API\n\nColección completa para el proyecto final de **Sistema de Tickets (Helpdesk)**.\nCubre los endpoints de autenticación, tickets (CRUD), comentarios, carga de\nevidencias y generación de reportes.\n\n## Cómo usarla\n\n1. Importe esta colección y el entorno `Sistema de Tickets - Local` en Postman.\n2. Verifique que la variable `urlBase` apunte a su backend\n   (por defecto `http://localhost:4000/api/v1`).\n3. Ejecute las peticiones **en orden**, empezando por *01 - Autenticación →\n   Iniciar sesión*. Las peticiones posteriores usan el token que esa petición\n   guarda automáticamente.\n\n## Automatización\n\nTodas las peticiones tienen scripts de prueba que validan el código de estado\n**y** la forma del cuerpo de la respuesta. Para una verificación completa use\nel **Collection Runner**: seleccione la colección, elija el entorno y pulse\n*Run*. El orden de carpetas ya está definido para que las dependencias se\nresuelvan solas.\n\n## Variables que se capturan solas\n\n| Variable | Se obtiene en | Se usa en |\n|---|---|---|\n| `tokenAcceso` | Iniciar sesión / Registro | Todas las peticiones protegidas |\n| `tokenRefresco` | Iniciar sesión | Renovar token, Cerrar sesión |\n| `idUsuario` | Iniciar sesión | Consultas de usuario |\n| `idTicket` | Crear ticket / Listar tickets | Detalle, comentarios, adjuntos |\n| `idCategoria` | Listar categorías | Crear ticket |\n| `idComentario` | Crear comentario | Eliminar comentario |\n| `idAdjunto` | Subir evidencia | Descargar / eliminar evidencia |\n| `idAgente` | Listar agentes | Asignar responsable |\n\n## Credenciales de prueba\n\nCárguelas con `npm run db:seed` en el backend:\n\n- Administrador: `admin@sistema-tickets.local`\n- Agente: `agente1@sistema-tickets.local`\n- Solicitante: `usuario1@sistema-tickets.local`\n\nContraseña común: `Demo2026#Tickets`\n\n## Notas de seguridad que se demuestran aquí\n\n- La petición **03 - Registro con intento de escalada de privilegios** envía\n  `\"rol\": \"ADMINISTRADOR\"` en el cuerpo. El backend responde creando la cuenta\n  como `SOLICITANTE`. Es la prueba de que el registro público no permite\n  autoascensos.\n- La petición **Tickets → Acceso no autorizado** intenta leer un ticket ajeno\n  y espera un **404** (no un 403): el sistema no revela la existencia de\n  recursos de otros usuarios.\n- La petición **Seguridad → Intento de inyección SQL** envía una carga\n  maliciosa en el parámetro de búsqueda y comprueba que la respuesta sea\n  normal (la consulta está parametrizada).\n\n> **Importante:** esta colección usa `urlBase` como variable de entorno. Si va a\n> probar el sistema desplegado en la nube, cámbiela a su dominio real sin tocar\n> ninguna petición.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "00000000"
+  },
+  "item": [
+    {
+      "name": "00 - Salud del sistema",
+      "item": [
+        {
+          "name": "Verificar que el servicio responde",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El servicio responde con 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El cuerpo confirma el estado operativo', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.exito).to.be.true;",
+                  "    pm.expect(cuerpo.datos.estado).to.eql('operativo');",
+                  "    pm.expect(cuerpo.datos.baseDatos.conectada).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('La respuesta llega en menos de 2 segundos', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlBase}}/salud",
+              "host": ["{{urlBase}}"],
+              "path": ["salud"]
+            },
+            "description": "Comprueba que el backend esté arriba y que la conexión con PostgreSQL funcione. Es la primera petición que conviene ejecutar: si falla, ninguna otra funcionará."
+          }
+        },
+        {
+          "name": "Índice de la API",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el catálogo de módulos', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.modulos).to.have.property('tickets');",
+                  "    pm.expect(cuerpo.datos.modulos).to.have.property('reportes');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlBase}}",
+              "host": ["{{urlBase}}"],
+              "path": [""]
+            },
+            "description": "Lista todos los módulos y endpoints disponibles. Útil para comprobar rápido qué expone la API."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Autenticación",
+      "item": [
+        {
+          "name": "Iniciar sesión (administrador)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Inicio de sesión exitoso (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve el par de tokens y el usuario', function () {",
+                  "    pm.expect(cuerpo.exito).to.be.true;",
+                  "    pm.expect(cuerpo.datos).to.have.property('tokenAcceso');",
+                  "    pm.expect(cuerpo.datos).to.have.property('tokenRefresco');",
+                  "    pm.expect(cuerpo.datos.usuario).to.have.property('id');",
+                  "});",
+                  "",
+                  "pm.test('La contraseña NUNCA viaja en la respuesta', function () {",
+                  "    const serializado = JSON.stringify(cuerpo);",
+                  "    pm.expect(serializado).to.not.include('contrasena_hash');",
+                  "    pm.expect(serializado).to.not.include('contrasenaHash');",
+                  "});",
+                  "",
+                  "// Captura automática de variables para el resto de la colección.",
+                  "if (cuerpo && cuerpo.datos) {",
+                  "    pm.collectionVariables.set('tokenAcceso', cuerpo.datos.tokenAcceso);",
+                  "    pm.collectionVariables.set('tokenRefresco', cuerpo.datos.tokenRefresco);",
+                  "    pm.collectionVariables.set('idUsuario', cuerpo.datos.usuario.id);",
+                  "    pm.collectionVariables.set('rolUsuario', cuerpo.datos.usuario.rol);",
+                  "    console.log('Token capturado. Rol: ' + cuerpo.datos.usuario.rol);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correoAdmin}}\",\n  \"contrasena\": \"{{contrasenaDemo}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/iniciar-sesion",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "iniciar-sesion"]
+            },
+            "description": "Autentica al administrador y **guarda automáticamente** el token de acceso, el de refresco y el identificador de usuario en las variables de colección. Ejecute esta petición antes que cualquier otra protegida."
+          }
+        },
+        {
+          "name": "Iniciar sesión (agente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El agente inicia sesión correctamente', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.usuario.rol).to.eql('AGENTE');",
+                  "    pm.collectionVariables.set('tokenAgente', cuerpo.datos.tokenAcceso);",
+                  "    pm.collectionVariables.set('idAgenteSesion', cuerpo.datos.usuario.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correoAgente}}\",\n  \"contrasena\": \"{{contrasenaDemo}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/iniciar-sesion",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "iniciar-sesion"]
+            },
+            "description": "Inicia sesión con una cuenta de agente. Guarda su token aparte (`tokenAgente`) para poder comparar permisos entre roles más adelante."
+          }
+        },
+        {
+          "name": "Iniciar sesión (solicitante)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El solicitante inicia sesión correctamente', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.usuario.rol).to.eql('SOLICITANTE');",
+                  "    pm.collectionVariables.set('tokenSolicitante', cuerpo.datos.tokenAcceso);",
+                  "    pm.collectionVariables.set('idSolicitanteSesion', cuerpo.datos.usuario.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correoSolicitante}}\",\n  \"contrasena\": \"{{contrasenaDemo}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/iniciar-sesion",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "iniciar-sesion"]
+            },
+            "description": "Inicia sesión con una cuenta de solicitante. Guarda su token en `tokenSolicitante`, que usan las pruebas de seguridad (IDOR, acceso a reportes) para comprobar que un usuario final no puede salirse de su ámbito."
+          }
+        },
+        {
+          "name": "Registro de solicitante (caso normal)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Correo único por ejecución: evita el error 409 de duplicado",
+                  "// cuando se corre la colección más de una vez.",
+                  "const marca = Date.now();",
+                  "pm.collectionVariables.set('correoAleatorio', 'prueba' + marca + '@sistema-tickets.local');",
+                  "pm.collectionVariables.set('nombreAleatorio', 'Usuario de Prueba ' + marca);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('La cuenta se crea con estado 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('El rol asignado es SOLICITANTE', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.usuario.rol).to.eql('SOLICITANTE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreCompleto\": \"{{nombreAleatorio}}\",\n  \"correo\": \"{{correoAleatorio}}\",\n  \"contrasena\": \"Prueba2026#Segura\",\n  \"departamento\": \"Pruebas automatizadas\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/registro",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "registro"]
+            },
+            "description": "Registro público normal. El correo se genera con marca de tiempo en el script de pre-petición para poder ejecutar la colección varias veces sin chocar con la restricción de unicidad."
+          }
+        },
+        {
+          "name": "Registro con intento de escalada de privilegios",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('marcaTiempo', Date.now());"],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('La cuenta se crea igualmente (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('DEFENSA: el rol ADMINISTRADOR fue IGNORADO', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.usuario.rol).to.eql('SOLICITANTE',",
+                  "        'FALLO DE SEGURIDAD: el registro publico acepto un rol privilegiado');",
+                  "});",
+                  "",
+                  "pm.test('El token emitido corresponde a un solicitante', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    // El payload del JWT se decodifica para comprobar el rol real.",
+                  "    const payload = JSON.parse(atob(cuerpo.datos.tokenAcceso.split('.')[1]));",
+                  "    pm.expect(payload.rol).to.eql('SOLICITANTE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreCompleto\": \"Atacante Privilegiado\",\n  \"correo\": \"atacante{{marcaTiempo}}@sistema-tickets.local\",\n  \"contrasena\": \"Ataque2026#Seguro\",\n  \"rol\": \"ADMINISTRADOR\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/registro",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "registro"]
+            },
+            "description": "**Prueba de seguridad clave.** Envía `\"rol\": \"ADMINISTRADOR\"` en el registro público. El backend fuerza el rol SOLICITANTE porque `user.service.js` ignora el rol enviado cuando quien registra no es administrador. Este es el ejemplo perfecto para la defensa contra el cliente tóxico."
+          }
+        },
+        {
+          "name": "Perfil del usuario autenticado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el perfil (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('No expone el hash de la contraseña', function () {",
+                  "    pm.expect(JSON.stringify(pm.response.json())).to.not.include('contrasena_hash');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/auth/perfil",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "perfil"]
+            },
+            "description": "Devuelve los datos del usuario dueño del token. Es la petición que el frontend usa al recargar la página para validar que la sesión sigue viva."
+          }
+        },
+        {
+          "name": "Renovar token de acceso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Renovación exitosa (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve un token nuevo y distinto', function () {",
+                  "    pm.expect(cuerpo.datos).to.have.property('tokenAcceso');",
+                  "    pm.expect(cuerpo.datos.tokenAcceso).to.not.eql(pm.collectionVariables.get('tokenAcceso'));",
+                  "});",
+                  "",
+                  "pm.test('ROTACIÓN: el token de refresco también cambia', function () {",
+                  "    pm.expect(cuerpo.datos.tokenRefresco).to.not.eql(pm.collectionVariables.get('tokenRefresco'));",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('tokenAcceso', cuerpo.datos.tokenAcceso);",
+                  "pm.collectionVariables.set('tokenRefresco', cuerpo.datos.tokenRefresco);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenRefresco\": \"{{tokenRefresco}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/refrescar",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "refrescar"]
+            },
+            "description": "Renueva el token de acceso. Comprueba la **rotación obligatoria**: el token de refresco usado se revoca y se emite uno nuevo. Si un atacante reutiliza uno viejo, el backend responde 401."
+          }
+        },
+        {
+          "name": "Reutilizar un token de refresco ya usado (debe fallar)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: la reutilización se rechaza con 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.codigo).to.eql('NO_AUTENTICADO');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenRefresco\": \"token-viejo-que-ya-fue-usado-y-por-lo-tanto-fue-revocado\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/refrescar",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "refrescar"]
+            },
+            "description": "Demuestra que un token de refresco ya consumido (o robado) no sirve. El backend guarda únicamente el **hash** del token, de modo que ni siquiera con acceso a la base de datos se pueden reutilizar."
+          }
+        },
+        {
+          "name": "Cerrar sesión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cierre de sesión exitoso (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenRefresco\": \"{{tokenRefresco}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/auth/cerrar-sesion",
+              "host": ["{{urlBase}}"],
+              "path": ["auth", "cerrar-sesion"]
+            },
+            "description": "Revoca el token de refresco. Ejecútela al final de una sesión de pruebas para dejar la base de datos limpia de tokens vigentes."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Categorías",
+      "item": [
+        {
+          "name": "Listar categorías",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el catálogo (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('El catálogo tiene al menos una categoría', function () {",
+                  "    pm.expect(cuerpo.datos).to.be.an('array');",
+                  "    pm.expect(cuerpo.datos.length).to.be.above(0,",
+                  "        'Ejecute npm run db:seed en el backend para cargar los datos de demostración');",
+                  "});",
+                  "",
+                  "pm.test('Cada categoría declara su SLA en horas', function () {",
+                  "    cuerpo.datos.forEach(function (categoria) {",
+                  "        pm.expect(categoria).to.have.property('sla_horas');",
+                  "        pm.expect(categoria.sla_horas).to.be.above(0);",
+                  "    });",
+                  "});",
+                  "",
+                  "if (cuerpo.datos && cuerpo.datos.length > 0) {",
+                  "    pm.collectionVariables.set('idCategoria', cuerpo.datos[0].id);",
+                  "    console.log('Categoría capturada: ' + cuerpo.datos[0].nombre);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/categorias?soloActivas=true",
+              "host": ["{{urlBase}}"],
+              "path": ["categorias"],
+              "query": [{ "key": "soloActivas", "value": "true" }]
+            },
+            "description": "Lista las categorías activas y **captura automáticamente** el identificador de la primera, que se reutiliza al crear tickets."
+          }
+        },
+        {
+          "name": "Crear categoría (solo administrador)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('La categoría se crea (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Conserva el SLA indicado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.sla_horas).to.eql(6);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Categoria de Prueba {{marcaTiempo}}\",\n  \"descripcion\": \"Creada desde la coleccion de Postman\",\n  \"slaHoras\": 6\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/categorias",
+              "host": ["{{urlBase}}"],
+              "path": ["categorias"]
+            },
+            "description": "Crea una categoría nueva. Requiere rol ADMINISTRADOR: si se ejecuta con el token de un agente, el backend responde 403."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('marcaTiempo', Date.now());"],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('La categoría se crea (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Conserva el SLA indicado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.sla_horas).to.eql(6);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear categoría como agente (debe fallar con 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: un agente no puede crear categorías (403)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.codigo).to.eql('PROHIBIDO');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAgente}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Intento no autorizado\",\n  \"slaHoras\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/categorias",
+              "host": ["{{urlBase}}"],
+              "path": ["categorias"]
+            },
+            "description": "**Prueba de autorización por rol.** Usa el token del agente para crear una categoría. El backend responde 403 porque el middleware `autorizar('ADMINISTRADOR')` lo bloquea antes de llegar al controlador."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Tickets (CRUD)",
+      "item": [
+        {
+          "name": "Crear ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El ticket se crea (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('El backend genera el folio automáticamente', function () {",
+                  "    pm.expect(cuerpo.datos.codigo).to.match(/^TK-\\d{4}-\\d{6}$/,",
+                  "        'El folio debe tener el formato TK-AAAA-000000');",
+                  "});",
+                  "",
+                  "pm.test('El estado inicial es NUEVO', function () {",
+                  "    pm.expect(cuerpo.datos.estado).to.eql('NUEVO');",
+                  "});",
+                  "",
+                  "pm.test('El SLA se calculó desde la categoría', function () {",
+                  "    pm.expect(cuerpo.datos.fecha_limite_sla).to.not.be.null;",
+                  "    const limite = new Date(cuerpo.datos.fecha_limite_sla);",
+                  "    pm.expect(limite.getTime()).to.be.above(Date.now(),",
+                  "        'La fecha limite debe estar en el futuro');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('idTicket', cuerpo.datos.id);",
+                  "pm.collectionVariables.set('codigoTicket', cuerpo.datos.codigo);",
+                  "console.log('Ticket creado: ' + cuerpo.datos.codigo);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Prueba automatizada de creacion de ticket\",\n  \"descripcion\": \"Este ticket fue generado por la coleccion de Postman para validar el endpoint de creacion, la generacion automatica del folio y el calculo del SLA.\",\n  \"categoriaId\": \"{{idCategoria}}\",\n  \"prioridad\": \"ALTA\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"]
+            },
+            "description": "Crea un ticket y **captura su identificador** para el resto de la colección. Verifica que el folio lo genere el backend (no el cliente) y que el SLA se calcule por trigger a partir de la categoría."
+          }
+        },
+        {
+          "name": "Crear ticket con datos inválidos (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: la validación rechaza el envío (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('La respuesta explica QUÉ campo falló', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.codigo).to.eql('SOLICITUD_INVALIDA');",
+                  "    pm.expect(cuerpo.detalles).to.be.an('array');",
+                  "    pm.expect(cuerpo.detalles.length).to.be.above(0);",
+                  "});",
+                  "",
+                  "pm.test('No se creó ningún ticket', function () {",
+                  "    pm.expect(pm.response.json().datos).to.be.undefined;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"ab\",\n  \"descripcion\": \"corta\",\n  \"prioridad\": \"URGENTISIMA\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"]
+            },
+            "description": "Envía un título demasiado corto, una descripción insuficiente y una prioridad inexistente. El esquema Zod devuelve 400 con la lista de campos problemáticos: el controlador nunca llega a ejecutarse."
+          }
+        },
+        {
+          "name": "Listar tickets con filtros",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el listado (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Incluye metadatos de paginación', function () {",
+                  "    pm.expect(cuerpo.meta).to.have.property('paginacion');",
+                  "    pm.expect(cuerpo.meta.paginacion).to.have.property('total');",
+                  "    pm.expect(cuerpo.meta.paginacion).to.have.property('totalPaginas');",
+                  "});",
+                  "",
+                  "pm.test('Respeta el límite solicitado', function () {",
+                  "    pm.expect(cuerpo.datos.length).to.be.at.most(5);",
+                  "});",
+                  "",
+                  "pm.test('Todos los tickets traen su categoría resuelta', function () {",
+                  "    cuerpo.datos.forEach(function (ticket) {",
+                  "        pm.expect(ticket).to.have.property('solicitante_nombre');",
+                  "        pm.expect(ticket).to.have.property('codigo');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets?pagina=1&limite=5&ordenarPor=creado_en&direccion=DESC",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"],
+              "query": [
+                { "key": "pagina", "value": "1" },
+                { "key": "limite", "value": "5" },
+                { "key": "ordenarPor", "value": "creado_en" },
+                { "key": "direccion", "value": "DESC" }
+              ]
+            },
+            "description": "Listado paginado. Comprueba que la respuesta incluya los metadatos de paginación y que los joins (nombre del solicitante, del agente, categoría) vengan resueltos."
+          }
+        },
+        {
+          "name": "Obtener ticket por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el ticket (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El identificador coincide con el solicitado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.id).to.eql(pm.collectionVariables.get('idTicket'));",
+                  "});",
+                  "",
+                  "pm.test('Incluye los contadores de adjuntos y comentarios', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos).to.have.property('total_adjuntos');",
+                  "    pm.expect(cuerpo.datos).to.have.property('total_comentarios');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}"]
+            },
+            "description": "Detalle completo del ticket creado en el paso anterior."
+          }
+        },
+        {
+          "name": "Actualizar datos del ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Actualización exitosa (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Los cambios se reflejan', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.prioridad).to.eql('CRITICA');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prioridad\": \"CRITICA\",\n  \"titulo\": \"Prueba automatizada (titulo actualizado)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}"]
+            },
+            "description": "Modifica únicamente los campos descriptivos. El estado NO se cambia por esta vía: tiene su propio endpoint con validación de la máquina de estados."
+          }
+        },
+        {
+          "name": "Transición ilegal de estado (debe fallar con 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: la transición imposible se rechaza (409)', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje explica las transiciones válidas', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.codigo).to.eql('CONFLICTO');",
+                  "    pm.expect(cuerpo.mensaje).to.include('Transicion no permitida');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"CERRADO\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/estado",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "estado"]
+            },
+            "description": "**Prueba estrella para la defensa.** Intenta saltar de NUEVO directamente a CERRADO. La máquina de estados del servicio lo bloquea con 409. El cliente tóxico puede pulsar todos los botones que quiera: el grafo de estados no se rompe."
+          }
+        },
+        {
+          "name": "Flujo completo: NUEVO → ABIERTO → EN_PROGRESO → RESUELTO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El ticket queda RESUELTO (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.estado).to.eql('RESUELTO');",
+                  "});",
+                  "",
+                  "pm.test('Se registró la fecha de resolución', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.fecha_resolucion).to.not.be.null;",
+                  "});",
+                  "",
+                  "pm.test('La solución quedó guardada', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.solucion).to.include('Postman');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAgente}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"RESUELTO\",\n  \"solucion\": \"Se ejecuto la transicion completa desde Postman para validar la maquina de estados y el registro automatico de la fecha de resolucion.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/estado",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "estado"]
+            },
+            "description": "Marca el ticket como RESUELTO usando el token del agente. Dispara la **notificación automática** al solicitante (por correo y, si tiene teléfono registrado, por SMS). Nota: para llegar a RESUELTO desde NUEVO hay que pasar antes por ABIERTO o EN_PROGRESO; si esta petición falla con 409, ejecute primero «Asignar responsable»."
+          }
+        },
+        {
+          "name": "Resolver sin registrar solución (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: se exige la solución para resolver (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje indica el requisito', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje).to.include('solucion');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAgente}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"RESUELTO\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/estado",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "estado"]
+            },
+            "description": "Regla de negocio: no se puede resolver un ticket sin documentar la solución. Sin esta validación, el reporte de desempeño perdería sentido y el solicitante no sabría qué se hizo."
+          }
+        },
+        {
+          "name": "Listar agentes ordenados por carga",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve la lista de agentes (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Cada agente reporta su carga de trabajo', function () {",
+                  "    pm.expect(cuerpo.datos).to.be.an('array');",
+                  "    if (cuerpo.datos.length > 0) {",
+                  "        pm.expect(cuerpo.datos[0]).to.have.property('tickets_activos');",
+                  "        pm.collectionVariables.set('idAgente', cuerpo.datos[0].id);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Los agentes están ordenados de menor a mayor carga', function () {",
+                  "    const cargas = cuerpo.datos.map(function (a) { return a.tickets_activos; });",
+                  "    const ordenadas = cargas.slice().sort(function (a, b) { return a - b; });",
+                  "    pm.expect(cargas).to.eql(ordenadas);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/usuarios/agentes",
+              "host": ["{{urlBase}}"],
+              "path": ["usuarios", "agentes"]
+            },
+            "description": "Agentes activos ordenados por carga de trabajo. Es la consulta que permite repartir tickets de forma equilibrada y evita que un agente acumule todo el trabajo."
+          }
+        },
+        {
+          "name": "Asignar responsable al ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Asignación exitosa (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El agente quedó asignado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.agente_id).to.eql(pm.collectionVariables.get('idAgente'));",
+                  "});",
+                  "",
+                  "pm.test('El ticket pasó a ABIERTO automáticamente', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(['ABIERTO', 'EN_PROGRESO', 'RESUELTO']).to.include(cuerpo.datos.estado);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agenteId\": \"{{idAgente}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/agente",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "agente"]
+            },
+            "description": "Asigna el ticket a un agente. Al asignar, el ticket pasa de NUEVO a ABIERTO de forma automática y se notifica al agente por correo."
+          }
+        },
+        {
+          "name": "Historial de auditoría del ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve la bitácora (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Se registraron los cambios de estado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos).to.be.an('array');",
+                  "    pm.expect(cuerpo.datos.length).to.be.above(0,",
+                  "        'El trigger de auditoria debe registrar al menos la creacion');",
+                  "});",
+                  "",
+                  "pm.test('Cada entrada identifica el estado nuevo', function () {",
+                  "    pm.response.json().datos.forEach(function (entrada) {",
+                  "        pm.expect(entrada).to.have.property('estado_nuevo');",
+                  "        pm.expect(entrada).to.have.property('creado_en');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/historial",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "historial"]
+            },
+            "description": "Bitácora inmutable de cambios de estado, escrita por un trigger de PostgreSQL. Se generó sin que la aplicación lo pidiera: ningún cambio puede quedar sin registrar, ni siquiera si alguien escribe SQL directamente en la base de datos."
+          }
+        },
+        {
+          "name": "Estadísticas del panel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve los indicadores (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Incluye todos los contadores esperados', function () {",
+                  "    pm.expect(cuerpo.datos).to.have.property('total');",
+                  "    pm.expect(cuerpo.datos).to.have.property('pendientes');",
+                  "    pm.expect(cuerpo.datos).to.have.property('resueltos');",
+                  "    pm.expect(cuerpo.datos).to.have.property('vencidos');",
+                  "});",
+                  "",
+                  "pm.test('Los contadores son coherentes entre sí', function () {",
+                  "    pm.expect(cuerpo.datos.total).to.be.at.least(cuerpo.datos.resueltos);",
+                  "    pm.expect(cuerpo.datos.total).to.be.at.least(cuerpo.datos.pendientes);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/estadisticas",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "estadisticas"]
+            },
+            "description": "KPIs que alimentan el panel principal. Para un solicitante, el backend aplica el filtro de alcance y solo cuenta SUS tickets."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Comentarios",
+      "item": [
+        {
+          "name": "Agregar comentario público",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Comentario publicado (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('El comentario no es interno', function () {",
+                  "    pm.expect(cuerpo.datos.es_interno).to.be.false;",
+                  "});",
+                  "",
+                  "pm.test('Trae el nombre del autor resuelto', function () {",
+                  "    pm.expect(cuerpo.datos.autor_nombre).to.be.a('string');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('idComentario', cuerpo.datos.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contenido\": \"Comentario publico generado desde Postman. Este mensaje es visible para el solicitante y dispara una notificacion por correo.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/comentarios",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "comentarios"]
+            },
+            "description": "Publica un comentario visible para el solicitante y notifica por correo (si el autor no es el propio solicitante)."
+          }
+        },
+        {
+          "name": "Agregar nota interna (solo agentes)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Nota interna registrada (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Queda marcada como interna', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos.es_interno).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('No se envía notificación al solicitante', function () {",
+                  "    // La nota interna no debe generar correo: es una conversación",
+                  "    // privada entre el equipo de soporte.",
+                  "    pm.expect(pm.response.code).to.eql(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAgente}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contenido\": \"Nota interna: se solicito al proveedor la reposicion del equipo. No informar al usuario hasta tener confirmacion.\",\n  \"esInterno\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/comentarios",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "comentarios"]
+            },
+            "description": "Crea una nota interna. El backend **fuerza `es_interno = true` solo si el autor es agente o administrador**: un solicitante que envíe `esInterno: true` obtiene un comentario público, no puede ocultar información al equipo."
+          }
+        },
+        {
+          "name": "Listar comentarios",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve la conversación (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('La conversación tiene al menos un comentario', function () {",
+                  "    pm.expect(pm.response.json().datos.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/comentarios",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "comentarios"]
+            },
+            "description": "Lista la conversación. Como se usa el token del administrador, incluye las notas internas. Con el token de un solicitante, el filtro se aplica **en SQL**, de modo que los comentarios internos nunca salen de la base de datos."
+          }
+        },
+        {
+          "name": "Eliminar comentario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Comentario eliminado (204)', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test('La respuesta no tiene cuerpo', function () {",
+                  "    pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/comentarios/{{idComentario}}",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "comentarios", "{{idComentario}}"]
+            },
+            "description": "Elimina el comentario creado antes. Solo su autor o un administrador pueden hacerlo; cualquier otro usuario recibe 403."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Evidencias (carga de archivos)",
+      "item": [
+        {
+          "name": "Subir evidencia (multipart/form-data)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Archivo adjuntado (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Devuelve la lista de adjuntos registrados', function () {",
+                  "    pm.expect(cuerpo.datos).to.be.an('array');",
+                  "    pm.expect(cuerpo.datos.length).to.be.above(0);",
+                  "});",
+                  "",
+                  "pm.test('Calcula el hash SHA-256 del archivo', function () {",
+                  "    pm.expect(cuerpo.datos[0].hash_sha256).to.match(/^[a-f0-9]{64}$/,",
+                  "        'El hash debe ser un SHA-256 hexadecimal de 64 caracteres');",
+                  "});",
+                  "",
+                  "pm.test('El nombre almacenado NO conserva el nombre original', function () {",
+                  "    // El servidor renombra el archivo para impedir path traversal",
+                  "    // y sobreescritura de archivos existentes.",
+                  "    pm.expect(cuerpo.datos[0].nombre_almacenado).to.not.eql(cuerpo.datos[0].nombre_original);",
+                  "});",
+                  "",
+                  "pm.test('Reporta el tamaño en bytes', function () {",
+                  "    pm.expect(cuerpo.datos[0].tamano_bytes).to.be.above(0);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('idAdjunto', cuerpo.datos[0].id);",
+                  "console.log('Adjunto registrado: ' + cuerpo.datos[0].nombre_original);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivos",
+                  "type": "file",
+                  "src": [],
+                  "description": "Seleccione un archivo PNG, JPG, PDF, TXT, CSV, ZIP, DOCX o XLSX de máximo 10 MB. Puede adjuntar hasta 5 archivos por envío (repita la clave \"archivos\")."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/adjuntos",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "adjuntos"]
+            },
+            "description": "**Carga de evidencia.** El nombre del campo debe ser exactamente `archivos` (así lo espera multer en el backend). Comprueba que el servidor: renombra el archivo, calcula su SHA-256, aplica la lista blanca de tipos y respeta la cuota de 50 MB por ticket."
+          }
+        },
+        {
+          "name": "Listar evidencias del ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve los adjuntos (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cada adjunto incluye quién lo subió', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    if (cuerpo.datos.length > 0) {",
+                  "        pm.expect(cuerpo.datos[0]).to.have.property('subido_por_nombre');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/adjuntos",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "adjuntos"]
+            },
+            "description": "Lista las evidencias del ticket con sus metadatos y el usuario que las subió."
+          }
+        },
+        {
+          "name": "Descargar evidencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Descarga exitosa (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Se envía como archivo adjunto, no como página web', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+                  "});",
+                  "",
+                  "pm.test('DEFENSA: se bloquea la interpretación del tipo de archivo', function () {",
+                  "    // Evita que el navegador ejecute un archivo subido que intente",
+                  "    // hacerse pasar por otro tipo.",
+                  "    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/adjuntos/{{idAdjunto}}/descargar",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "adjuntos", "{{idAdjunto}}", "descargar"]
+            },
+            "description": "Descarga el binario. La ruta se reconstruye desde el nombre generado por el servidor y se verifica que siga dentro del directorio de evidencias: es la protección definitiva contra *path traversal*."
+          }
+        },
+        {
+          "name": "Subir archivo de tipo no permitido (debe fallar)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el tipo no permitido se rechaza', function () {",
+                  "    // El backend responde 400 (multer) o 422 (verificacion de firma",
+                  "    // binaria) segun el tipo de archivo enviado.",
+                  "    pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje indica los formatos aceptados', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje.toLowerCase()).to.match(/permitido|formato|valido/);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivos",
+                  "type": "file",
+                  "src": [],
+                  "description": "Seleccione a propósito un archivo NO permitido: un .exe, un .sh, un .php o un .html. El backend debe rechazarlo."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/adjuntos",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "adjuntos"]
+            },
+            "description": "**Prueba de defensa.** Intenta subir un archivo ejecutable. Se rechaza por dos capas: la lista blanca de MIME types en multer y, si el archivo se hiciera pasar por otro tipo, la **verificación de firma binaria** (magic numbers) que lee los primeros bytes del archivo real."
+          }
+        },
+        {
+          "name": "Eliminar evidencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Evidencia eliminada (204)', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}/adjuntos/{{idAdjunto}}",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}", "adjuntos", "{{idAdjunto}}"]
+            },
+            "description": "Elimina el registro en la base de datos **y** el archivo físico del disco. Solo quien lo subió o un administrador puede hacerlo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Reportes",
+      "item": [
+        {
+          "name": "Descargar reporte PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte generado (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El tipo de contenido es PDF', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "});",
+                  "",
+                  "pm.test('Se ofrece como descarga con nombre de archivo', function () {",
+                  "    const disposicion = pm.response.headers.get('Content-Disposition');",
+                  "    pm.expect(disposicion).to.include('attachment');",
+                  "    pm.expect(disposicion).to.include('.pdf');",
+                  "});",
+                  "",
+                  "pm.test('Informa si el reporte quedó sin datos', function () {",
+                  "    // Si no hay tickets en el periodo, el reporte se genera igual con",
+                  "    // las tablas vacias y avisa por cabecera. NO es un error 500.",
+                  "    const sinDatos = pm.response.headers.get('X-Reporte-Sin-Datos');",
+                  "    pm.expect(['true', 'false']).to.include(sinDatos);",
+                  "    if (sinDatos === 'true') {",
+                  "        console.warn('El periodo consultado no tiene tickets: el PDF se genero vacio.');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('El archivo pesa mas de 1 KB (tiene contenido real)', function () {",
+                  "    pm.expect(pm.response.responseSize).to.be.above(1024);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/tickets?formato=pdf&tipo=gestion&desde={{fechaDesde}}&hasta={{fechaHasta}}",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "tickets"],
+              "query": [
+                { "key": "formato", "value": "pdf" },
+                { "key": "tipo", "value": "gestion" },
+                { "key": "desde", "value": "{{fechaDesde}}" },
+                { "key": "hasta", "value": "{{fechaHasta}}" }
+              ]
+            },
+            "description": "Genera y descarga el reporte en PDF. En Postman, guarde la respuesta con *Save Response → Save to a file* para abrir el documento.\n\nEste endpoint responde con el **archivo binario**, no con JSON: por eso las pruebas verifican cabeceras en lugar del cuerpo."
+          }
+        },
+        {
+          "name": "Descargar reporte Excel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte generado (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('El tipo de contenido es de hoja de cálculo', function () {",
+                  "    const tipo = pm.response.headers.get('Content-Type');",
+                  "    pm.expect(tipo).to.include('spreadsheetml.sheet');",
+                  "});",
+                  "",
+                  "pm.test('El nombre del archivo termina en .xlsx', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('.xlsx');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/tickets?formato=xlsx&tipo=detalle&desde={{fechaDesde}}&hasta={{fechaHasta}}",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "tickets"],
+              "query": [
+                { "key": "formato", "value": "xlsx" },
+                { "key": "tipo", "value": "detalle" },
+                { "key": "desde", "value": "{{fechaDesde}}" },
+                { "key": "hasta", "value": "{{fechaHasta}}" }
+              ]
+            },
+            "description": "Genera el reporte en Excel con cuatro hojas: Indicadores, Resumen, Desempeño por agente y Detalle de tickets. La hoja de detalle incluye autofiltro y encabezados congelados."
+          }
+        },
+        {
+          "name": "Reporte con formato no soportado (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el formato inválido se rechaza (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje lista los formatos disponibles', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje).to.include('pdf');",
+                  "    pm.expect(cuerpo.mensaje).to.include('xlsx');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/tickets?formato=word",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "tickets"],
+              "query": [{ "key": "formato", "value": "word" }]
+            },
+            "description": "Solicita un formato inexistente. El validador de la capa HTTP lo detiene antes de llegar al generador, así que no se desperdicia ningún recurso."
+          }
+        },
+        {
+          "name": "Reporte con rango de fechas invertido (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el rango incoherente se rechaza (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje explica el problema', function () {",
+                  "    pm.expect(pm.response.json().mensaje).to.include('posterior');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/tickets?formato=pdf&desde=2026-12-31&hasta=2026-01-01",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "tickets"],
+              "query": [
+                { "key": "formato", "value": "pdf" },
+                { "key": "desde", "value": "2026-12-31" },
+                { "key": "hasta", "value": "2026-01-01" }
+              ]
+            },
+            "description": "Envía una fecha inicial posterior a la final. El servicio lo detecta y responde 400 con una explicación clara, en lugar de generar un reporte absurdo."
+          }
+        },
+        {
+          "name": "Datos del dashboard (JSON)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve los datos analíticos (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const cuerpo = pm.response.json();",
+                  "",
+                  "pm.test('Incluye todas las series que consume el frontend', function () {",
+                  "    pm.expect(cuerpo.datos).to.have.property('indicadores');",
+                  "    pm.expect(cuerpo.datos).to.have.property('porEstado');",
+                  "    pm.expect(cuerpo.datos).to.have.property('porAgente');",
+                  "    pm.expect(cuerpo.datos).to.have.property('serieTemporal');",
+                  "});",
+                  "",
+                  "pm.test('La serie temporal tiene un punto por día', function () {",
+                  "    pm.expect(cuerpo.datos.serieTemporal).to.be.an('array');",
+                  "    pm.expect(cuerpo.datos.serieTemporal.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/dashboard?dias=30",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "dashboard"],
+              "query": [{ "key": "dias", "value": "30" }]
+            },
+            "description": "Devuelve en JSON los mismos datos que lleva el reporte. Es el endpoint que alimenta las gráficas del panel, y sirve para verificar los números sin abrir el archivo."
+          }
+        },
+        {
+          "name": "Un solicitante no puede ver reportes (debe fallar con 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el solicitante no accede a reportes (403)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenSolicitante}}" }],
+            "url": {
+              "raw": "{{urlBase}}/reportes/dashboard",
+              "host": ["{{urlBase}}"],
+              "path": ["reportes", "dashboard"]
+            },
+            "description": "Intenta consultar el consolidado con el token de un solicitante. El módulo de reportes completo está restringido a AGENTE y ADMINISTRADOR: un usuario final no debe poder descargar la operación entera de la empresa.\n\n**Antes de ejecutarla**, capture el token de un solicitante con la petición «Iniciar sesión (solicitante)»."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Notificaciones",
+      "item": [
+        {
+          "name": "Historial de notificaciones del ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el historial (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cada envío reporta su estado', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    cuerpo.datos.forEach(function (notificacion) {",
+                  "        pm.expect(['PENDIENTE', 'ENVIADO', 'FALLIDO']).to.include(notificacion.estado);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/notificaciones/ticket/{{idTicket}}",
+              "host": ["{{urlBase}}"],
+              "path": ["notificaciones", "ticket", "{{idTicket}}"]
+            },
+            "description": "Historial de correos y SMS asociados al ticket. **Patrón outbox**: cada intento se guarda ANTES de enviarse, de modo que si el servidor de correo estaba caído el mensaje no se pierde y puede reintentarse."
+          }
+        },
+        {
+          "name": "Resumen de entrega de notificaciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve el resumen (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/notificaciones/resumen",
+              "host": ["{{urlBase}}"],
+              "path": ["notificaciones", "resumen"]
+            },
+            "description": "Métricas de entrega agrupadas por canal y estado."
+          }
+        },
+        {
+          "name": "Reintentar notificaciones fallidas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reintento ejecutado (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Informa cuántas se enviaron y cuántas fallaron', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.datos).to.have.property('intentadas');",
+                  "    pm.expect(cuerpo.datos).to.have.property('enviadas');",
+                  "    pm.expect(cuerpo.datos).to.have.property('fallidas');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/notificaciones/reintentar",
+              "host": ["{{urlBase}}"],
+              "path": ["notificaciones", "reintentar"]
+            },
+            "description": "Reintenta la cola de notificaciones pendientes o fallidas (hasta 3 intentos por mensaje). Es el botón que salva la demo si el servidor de correo estaba caído."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Pruebas de seguridad",
+      "item": [
+        {
+          "name": "Intento de inyección SQL en la búsqueda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: la inyección no afecta la consulta (200)', function () {",
+                  "    // La consulta esta parametrizada, asi que la carga se trata como",
+                  "    // texto literal y simplemente no encuentra coincidencias.",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('La respuesta es un listado normal, no un error de base de datos', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.exito).to.be.true;",
+                  "    pm.expect(cuerpo.datos).to.be.an('array');",
+                  "    pm.expect(JSON.stringify(cuerpo)).to.not.include('pg_');",
+                  "    pm.expect(JSON.stringify(cuerpo)).to.not.include('syntax error');",
+                  "});",
+                  "",
+                  "pm.test('No se filtró información de la estructura de la base', function () {",
+                  "    const texto = JSON.stringify(pm.response.json());",
+                  "    pm.expect(texto).to.not.include('usuarios');",
+                  "    pm.expect(texto).to.not.include('contrasena_hash');",
+                  "    pm.expect(texto).to.not.include('information_schema');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets?busqueda='; DROP TABLE tickets; --",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"],
+              "query": [{ "key": "busqueda", "value": "'; DROP TABLE tickets; --" }]
+            },
+            "description": "**Prueba de seguridad.** Envía una carga de inyección SQL clásica en el parámetro de búsqueda. Como **todas** las consultas usan placeholders (`$1`, `$2`…), PostgreSQL la trata como texto literal: la respuesta es un listado vacío, no un error ni una tabla borrada.\n\nLas únicas interpolaciones de cadena son la columna de ordenamiento y su dirección, validadas contra una lista blanca."
+          }
+        },
+        {
+          "name": "Intento de inyección SQL en el ordenamiento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: la columna no permitida se rechaza (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('El mensaje lista las columnas válidas', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje).to.include('Columna de ordenamiento no permitida');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets?ordenarPor=(SELECT%20contrasena_hash%20FROM%20usuarios%20LIMIT%201)",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"],
+              "query": [
+                {
+                  "key": "ordenarPor",
+                  "value": "(SELECT contrasena_hash FROM usuarios LIMIT 1)"
+                }
+              ]
+            },
+            "description": "Segundo vector de inyección: el `ORDER BY`. Como las columnas no se pueden parametrizar con placeholders, la defensa es una **lista blanca**: cualquier valor fuera de ella se rechaza con 400 antes de construir la consulta."
+          }
+        },
+        {
+          "name": "Acceso sin token (debe fallar con 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: se exige autenticación (401)', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('El formato de error es uniforme', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.exito).to.be.false;",
+                  "    pm.expect(cuerpo.codigo).to.eql('NO_AUTENTICADO');",
+                  "    pm.expect(cuerpo).to.have.property('mensaje');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlBase}}/tickets",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"]
+            },
+            "description": "Comprueba que ninguna ruta de datos quede expuesta sin autenticación y que el error siga el contrato uniforme de la API."
+          }
+        },
+        {
+          "name": "Acceso con token manipulado (debe fallar con 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: un JWT inválido se rechaza (401)', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('No se filtra el motivo criptográfico exacto', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje).to.not.include('signature');",
+                  "    pm.expect(cuerpo.mensaje).to.not.include('secret');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbCI6IkFETUlOSVNUUkFET1IifQ.firma_falsificada"
+              }
+            ],
+            "url": {
+              "raw": "{{urlBase}}/tickets",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"]
+            },
+            "description": "Intenta colar un JWT con el payload manipulado (rol ADMINISTRADOR) y la firma falsificada. Sin el secreto del servidor la firma no valida, así que el token se rechaza. **Aunque se cambiara el rol en el payload, el backend vuelve a consultar el usuario en la base de datos en cada petición.**"
+          }
+        },
+        {
+          "name": "IDOR: leer el ticket de otro usuario (debe fallar con 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: no se revela el recurso ajeno', function () {",
+                  "    // Se responde 404 y NO 403: el sistema no confirma siquiera que",
+                  "    // el ticket exista. Asi no se puede enumerar recursos ajenos.",
+                  "    pm.expect([403, 404]).to.include(pm.response.code);",
+                  "    if (pm.response.code === 404) {",
+                  "        pm.expect(pm.response.json().codigo).to.eql('NO_ENCONTRADO');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenSolicitante}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/{{idTicket}}",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "{{idTicket}}"]
+            },
+            "description": "**Prueba IDOR** (Insecure Direct Object Reference). Con el token de un solicitante se intenta leer el ticket creado por el administrador. El servicio aplica control de acceso **a nivel de fila** y responde 404 en lugar de 403, para no confirmar la existencia del recurso."
+          }
+        },
+        {
+          "name": "Recurso inexistente (debe fallar con 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve 404 con formato uniforme', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().codigo).to.eql('NO_ENCONTRADO');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/00000000-0000-0000-0000-000000000000",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "Identificador válido en formato pero inexistente. Comprueba que el error sea 404 y no un 500 con la traza de la base de datos."
+          }
+        },
+        {
+          "name": "Identificador con formato inválido (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el UUID malformado se rechaza (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('El error indica el campo problemático', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.detalles).to.be.an('array');",
+                  "    pm.expect(JSON.stringify(cuerpo.detalles)).to.include('UUID');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/tickets/no-es-un-uuid",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets", "no-es-un-uuid"]
+            },
+            "description": "Un identificador malformado se detiene en la validación Zod. Sin esa capa, PostgreSQL devolvería un error de conversión de tipo (código 22P02) que revelaría detalles internos."
+          }
+        },
+        {
+          "name": "Ruta inexistente (debe fallar con 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devuelve 404 controlado', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().codigo).to.eql('RUTA_NO_ENCONTRADA');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }],
+            "url": {
+              "raw": "{{urlBase}}/ruta/que/no/existe",
+              "host": ["{{urlBase}}"],
+              "path": ["ruta", "que", "no", "existe"]
+            },
+            "description": "Comprueba que el comodín de rutas devuelva el mismo formato de error que el resto de la API, sin exponer la estructura del servidor."
+          }
+        },
+        {
+          "name": "Cuerpo JSON malformado (debe fallar con 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DEFENSA: el JSON inválido se rechaza (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('No se expone la traza del analizador', function () {",
+                  "    const cuerpo = pm.response.json();",
+                  "    pm.expect(cuerpo.mensaje).to.include('JSON');",
+                  "    pm.expect(JSON.stringify(cuerpo)).to.not.include('Unexpected token at position');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAcceso}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"titulo\": \"sin cerrar la llave\", "
+            },
+            "url": {
+              "raw": "{{urlBase}}/tickets",
+              "host": ["{{urlBase}}"],
+              "path": ["tickets"]
+            },
+            "description": "Envía JSON truncado. El middleware de Express lanza un error de análisis que se traduce a un 400 con mensaje genérico: no se filtra la posición exacta del fallo ni la traza del analizador."
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Se ejecuta antes de CADA peticion de la coleccion.",
+          "//",
+          "// 1. Deja constancia en la consola de Postman de a donde se apunta,",
+          "//    para evitar el clasico error de probar contra el entorno equivocado.",
+          "console.log('[Sistema de Tickets] ' + pm.request.method + ' ' + pm.request.url.toString());",
+          "",
+          "// 2. Avisa si se intenta llamar a una ruta protegida sin token.",
+          "const rutasPublicas = ['/salud', '/vivo', '/auth/iniciar-sesion', '/auth/registro', '/auth/refrescar'];",
+          "const esPublica = rutasPublicas.some(function (ruta) { return pm.request.url.toString().includes(ruta); });",
+          "",
+          "if (!esPublica && !pm.collectionVariables.get('tokenAcceso')) {",
+          "    console.warn('AVISO: no hay token de acceso. Ejecute primero \"Iniciar sesion (administrador)\".');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Prueba transversal: TODA respuesta de la API debe llegar rapido.",
+          "// Es una verificacion de rendimiento basica que se aplica a todas",
+          "// las peticiones sin tener que repetirla en cada una.",
+          "pm.test('Tiempo de respuesta aceptable (< 3 s)', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+          "});",
+          "",
+          "// Prueba transversal: el contrato de respuesta siempre incluye",
+          "// el campo booleano 'exito', tanto en caso de exito como de error.",
+          "if (pm.response.code !== 204 && pm.response.headers.get('Content-Type') && pm.response.headers.get('Content-Type').includes('application/json')) {",
+          "    pm.test('La respuesta respeta el contrato { exito, ... }', function () {",
+          "        pm.expect(pm.response.json()).to.have.property('exito');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "urlBase", "value": "http://localhost:4000/api/v1", "type": "string" },
+    { "key": "correoAdmin", "value": "admin@sistema-tickets.local", "type": "string" },
+    { "key": "correoAgente", "value": "agente1@sistema-tickets.local", "type": "string" },
+    { "key": "correoSolicitante", "value": "usuario1@sistema-tickets.local", "type": "string" },
+    { "key": "contrasenaDemo", "value": "Demo2026#Tickets", "type": "string" },
+    { "key": "fechaDesde", "value": "2026-01-01", "type": "string" },
+    { "key": "fechaHasta", "value": "2026-12-31", "type": "string" },
+    { "key": "tokenAcceso", "value": "", "type": "string" },
+    { "key": "tokenRefresco", "value": "", "type": "string" },
+    { "key": "tokenAgente", "value": "", "type": "string" },
+    { "key": "tokenSolicitante", "value": "", "type": "string" },
+    { "key": "idUsuario", "value": "", "type": "string" },
+    { "key": "idTicket", "value": "", "type": "string" },
+    { "key": "idCategoria", "value": "", "type": "string" },
+    { "key": "idComentario", "value": "", "type": "string" },
+    { "key": "idAdjunto", "value": "", "type": "string" },
+    { "key": "idAgente", "value": "", "type": "string" }
+  ]
+}

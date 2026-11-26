@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reporte de pruebas de carga — Sistema de Tickets</title>
+<style>
+  :root {
+    --texto: #1f2328;
+    --suave: #57606a;
+    --borde: #d8dee4;
+    --fondo: #ffffff;
+    --panel: #f6f8fa;
+    --azul: #185fa5;
+    --azul-claro: #e6f1fb;
+    --verde: #1a7f37;
+    --verde-claro: #e8f5ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 24px 64px;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .hoja { max-width: 860px; margin: 0 auto; }
+  header { border-bottom: 2px solid var(--texto); padding-bottom: 18px; margin-bottom: 28px; }
+  .etiqueta {
+    display: inline-block; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--azul); font-weight: 600; margin-bottom: 8px;
+  }
+  h1 { font-size: 26px; line-height: 1.25; margin: 0 0 10px; font-weight: 600; }
+  .meta { font-size: 13px; color: var(--suave); }
+  .meta span + span::before { content: " · "; }
+  h2 {
+    font-size: 16px; margin: 34px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--borde); font-weight: 600;
+  }
+  h3 { font-size: 14px; margin: 22px 0 8px; font-weight: 600; }
+  p { margin: 0 0 12px; }
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin: 20px 0 8px;
+  }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--borde);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .kpi .valor { font-size: 24px; font-weight: 600; line-height: 1.1; display: block; }
+  .kpi .nombre { font-size: 11px; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi.bien .valor { color: var(--verde); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+  th { background: var(--panel); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total td { font-weight: 600; border-top: 2px solid var(--borde); }
+  .ok { color: var(--verde); font-weight: 600; }
+  .nota {
+    background: var(--azul-claro); border-left: 3px solid var(--azul);
+    padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 13px;
+  }
+  .nota strong { color: var(--azul); }
+  .aviso {
+    background: #fff8e5; border-left: 3px solid #bf8700;
+    padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 13px;
+  }
+  .grafica { margin: 18px 0 24px; }
+  .fila-barra { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .fila-barra .rotulo { width: 150px; font-size: 12px; color: var(--suave); }
+  .fila-barra .pista { flex: 1; background: var(--panel); border-radius: 4px; height: 22px; position: relative; }
+  .fila-barra .barra { height: 22px; border-radius: 4px; background: var(--azul); }
+  .fila-barra .cifra { width: 92px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pie { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--borde); font-size: 12px; color: var(--suave); }
+  ul { margin: 0 0 14px; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: var(--panel); border: 1px solid var(--borde);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px;
+  }
+  @media print {
+    body { padding: 0; font-size: 11pt; }
+    .hoja { max-width: none; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: avoid; }
+  }
+  @media (max-width: 640px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .fila-barra .rotulo { width: 100px; }
+  }
+</style>
+</head>
+<body>
+<div class="hoja">
+
+  <header>
+    <div class="etiqueta">Informe técnico</div>
+    <h1>Pruebas de carga con k6</h1>
+    <div class="meta">
+      <span>Sistema de Tickets — Helpdesk Empresarial</span>
+      <span>23 de septiembre de 2026</span>
+      <span>Grafana k6 · PostgreSQL 16 · Node.js 22</span>
+    </div>
+  </header>
+
+  <h2>1. Resumen ejecutivo</h2>
+  <p>
+    Se sometió el sistema a dos escenarios de carga concurrente: uno de capacidad
+    pura de escritura y otro con una proporción de uso realista. En conjunto se
+    enviaron <strong>6.421 peticiones</strong> y se crearon <strong>3.615
+    tickets</strong> sin un solo error de servidor.
+  </p>
+
+  <div class="kpis">
+    <div class="kpi">
+      <span class="valor">6.421</span>
+      <span class="nombre">Peticiones</span>
+    </div>
+    <div class="kpi bien">
+      <span class="valor">0</span>
+      <span class="nombre">Errores 5xx</span>
+    </div>
+    <div class="kpi bien">
+      <span class="valor">8,48 ms</span>
+      <span class="nombre">p95 uso realista</span>
+    </div>
+    <div class="kpi bien">
+      <span class="valor">15/15</span>
+      <span class="nombre">Umbrales cumplidos</span>
+    </div>
+  </div>
+
+  <div class="nota">
+    <strong>Conclusión:</strong> el sistema es estable bajo carga. El primer
+    cuello de botella está identificado —el pool de conexiones a PostgreSQL— y
+    es configurable sin tocar código.
+  </div>
+
+  <h2>2. Método</h2>
+  <ol>
+    <li>Levantar el sistema con Docker Compose y cargar el semillero de demostración.</li>
+    <li>Desactivar los tres limitadores de tasa: sin este paso la prueba mide el limitador, no el sistema.</li>
+    <li>Ejecutar la prueba de humo (10 pasos funcionales) y solo continuar si pasa.</li>
+    <li>Ejecutar los escenarios y comparar contra umbrales definidos de antemano.</li>
+  </ol>
+  <p>
+    k6 devuelve código de salida distinto de cero si un umbral se incumple, así
+    que el resultado no es una interpretación: es una verificación.
+  </p>
+
+  <h2>3. Entorno</h2>
+  <table>
+    <tr><th>Elemento</th><th>Característica</th></tr>
+    <tr><td>Backend</td><td>Node.js 22 + Express, una instancia</td></tr>
+    <tr><td>Base de datos</td><td>PostgreSQL 16 en contenedor, <code>DB_POOL_MAX=50</code></td></tr>
+    <tr><td>Equipo</td><td>Máquina de desarrollo, Docker Desktop</td></tr>
+    <tr><td>Datos</td><td>6 usuarios, 7 categorías, 12 tickets de demostración</td></tr>
+  </table>
+
+  <h2>4. Resultados</h2>
+
+  <h3>4.1 Escenario <code>tasa</code> — capacidad de escritura</h3>
+  <p>20 peticiones por segundo constantes durante 3 minutos, 100 % escritura.</p>
+  <table>
+    <tr><th>Métrica</th><th class="num">Valor</th></tr>
+    <tr><td>Peticiones totales</td><td class="num">3.560</td></tr>
+    <tr><td>Duración promedio</td><td class="num">424,21 ms</td></tr>
+    <tr><td>Duración p(95)</td><td class="num">1.478,95 ms</td></tr>
+    <tr><td>Duración p(99)</td><td class="num">12.388,98 ms</td></tr>
+    <tr><td>Tickets creados</td><td class="num">3.452</td></tr>
+    <tr><td><code>POST /tickets</code> p(95)</td><td class="num">1.263,00 ms</td></tr>
+    <tr><td>Tasa de aceptación</td><td class="num">100 %</td></tr>
+    <tr><td>Respuestas 429 / 400</td><td class="num">0 / 0</td></tr>
+    <tr class="total"><td>Errores 5xx</td><td class="num ok">0</td></tr>
+  </table>
+
+  <h3>4.2 Escenario <code>mixto</code> — uso realista</h3>
+  <p>Navegación con más lecturas que escrituras, como en un helpdesk real.</p>
+  <table>
+    <tr><th>Métrica</th><th class="num">Valor</th></tr>
+    <tr><td>Peticiones totales</td><td class="num">2.861</td></tr>
+    <tr><td>Duración promedio</td><td class="num">9,42 ms</td></tr>
+    <tr><td>Duración p(95)</td><td class="num">8,48 ms</td></tr>
+    <tr><td>Duración p(99)</td><td class="num">239,44 ms</td></tr>
+    <tr><td><code>POST /tickets</code> p(95)</td><td class="num">12,90 ms</td></tr>
+    <tr><td><code>GET /tickets</code> p(95)</td><td class="num">9,00 ms</td></tr>
+    <tr><td>Comprobaciones superadas</td><td class="num">4.730 / 4.730</td></tr>
+    <tr class="total"><td>Errores 5xx</td><td class="num ok">0</td></tr>
+  </table>
+
+  <div class="grafica">
+    <div class="fila-barra">
+      <div class="rotulo">tasa — peticiones</div>
+      <div class="pista"><div class="barra" style="width:100%"></div></div>
+      <div class="cifra">3.560</div>
+    </div>
+    <div class="fila-barra">
+      <div class="rotulo">mixto — peticiones</div>
+      <div class="pista"><div class="barra" style="width:80%"></div></div>
+      <div class="cifra">2.861</div>
+    </div>
+    <div class="fila-barra">
+      <div class="rotulo">tasa — tickets</div>
+      <div class="pista"><div class="barra" style="width:97%"></div></div>
+      <div class="cifra">3.452</div>
+    </div>
+    <div class="fila-barra">
+      <div class="rotulo">mixto — tickets</div>
+      <div class="pista"><div class="barra" style="width:4.7%"></div></div>
+      <div class="cifra">163</div>
+    </div>
+  </div>
+
+  <h2>5. Cumplimiento de umbrales</h2>
+  <table>
+    <tr>
+      <th>Umbral</th><th class="num">Criterio</th>
+      <th class="num">tasa</th><th class="num">mixto</th><th>Estado</th>
+    </tr>
+    <tr><td>Duración p(95)</td><td class="num">&lt; 2.500 ms</td><td class="num">1.478,95</td><td class="num">8,48</td><td class="ok">Cumple</td></tr>
+    <tr><td>Duración p(99)</td><td class="num">&lt; 15.000 ms</td><td class="num">12.388,98</td><td class="num">239,44</td><td class="ok">Cumple</td></tr>
+    <tr><td>Peticiones fallidas</td><td class="num">&lt; 1 %</td><td class="num">0 %</td><td class="num">0 %</td><td class="ok">Cumple</td></tr>
+    <tr><td>Creación p(95)</td><td class="num">&lt; 2.000 ms</td><td class="num">1.263,00</td><td class="num">12,90</td><td class="ok">Cumple</td></tr>
+    <tr><td>Creación p(99)</td><td class="num">&lt; 6.000 ms</td><td class="num">1.726,45</td><td class="num">67,22</td><td class="ok">Cumple</td></tr>
+    <tr><td>Éxito de creación</td><td class="num">&gt; 90 %</td><td class="num">100 %</td><td class="num">100 %</td><td class="ok">Cumple</td></tr>
+    <tr><td>Errores 5xx</td><td class="num">= 0</td><td class="num">0</td><td class="num">0</td><td class="ok">Cumple</td></tr>
+    <tr><td>Listado p(95)</td><td class="num">&lt; 500 ms</td><td class="num">—</td><td class="num">9,00</td><td class="ok">Cumple</td></tr>
+  </table>
+
+  <h2>6. Diagnóstico</h2>
+  <p>
+    Con <code>DB_POOL_MAX=10</code> el p(95) del escenario <code>tasa</code> sube a
+    <strong>~5.200 ms</strong>; con <code>DB_POOL_MAX=50</code> baja a
+    <strong>1.478,95 ms</strong>. El código no cambió: cambió cuántas consultas
+    puede tener en vuelo la aplicación.
+  </p>
+  <p>
+    El p(99) de 12,4 s frente a un p(95) de 1,5 s es la firma de un pool
+    saturado: la mayoría pasa rápido y una minoría espera una conexión libre.
+  </p>
+  <p>
+    El script autentica una sola vez por usuario virtual y reutiliza el token.
+    Es deliberado: bcrypt con coste 12 tarda unos 100 ms por verificación y, si
+    se autenticara en cada iteración, la prueba mediría el costo del hash y no el
+    del endpoint de tickets.
+  </p>
+
+  <h2>7. Limitaciones</h2>
+  <ul>
+    <li>Una sola instancia: no se probó escalado horizontal.</li>
+    <li>Entorno de desarrollo: los valores absolutos no son trasladables, pero la forma de la curva y el cuello de botella sí.</li>
+    <li>El frontend no participa: se mide la API, que es donde está el costo.</li>
+    <li>No se probó con volúmenes de producción.</li>
+  </ul>
+
+  <div class="aviso">
+    Las 13 comprobaciones no superadas del escenario <code>tasa</code> (0,06 % de
+    20.814) son verificaciones de latencia individual durante la cola máxima. No
+    hubo ningún error 5xx ni ningún 429, y todos los umbrales agregados se
+    cumplieron.
+  </div>
+
+  <h2>8. Evidencias</h2>
+  <table>
+    <tr><th>Archivo</th><th>Contenido</th></tr>
+    <tr><td><code>k6/resumen-tasa.json</code></td><td>Resumen crudo del escenario de capacidad</td></tr>
+    <tr><td><code>k6/resumen-mixto.json</code></td><td>Resumen crudo del escenario realista</td></tr>
+    <tr><td><code>k6/load-test.js</code></td><td>Script con 5 escenarios y 2 perfiles de umbrales</td></tr>
+    <tr><td><code>k6/smoke-test.js</code></td><td>Prueba funcional de 10 pasos</td></tr>
+    <tr><td><code>docs/RENDIMIENTO.md</code></td><td>Informe extendido y recomendaciones de escalado</td></tr>
+  </table>
+
+  <div class="pie">
+    Reporte generado a partir de las mediciones reales registradas en
+    <code>k6/resumen-tasa.json</code> y <code>k6/resumen-mixto.json</code>.
+    Para imprimir en PDF: Ctrl + P → «Guardar como PDF».
+  </div>
+
+</div>
+</body>
+</html>

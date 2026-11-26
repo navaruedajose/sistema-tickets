@@ -1,0 +1,129 @@
+# =====================================================================
+# SISTEMA DE TICKETS - Blueprint de Render
+# =====================================================================
+# Este archivo permite desplegar TODO el sistema desde el panel de Render
+# con "New +" -> "Blueprint" y apuntando al repositorio.
+#
+# Crea tres recursos:
+#   1. Una base de datos PostgreSQL gestionada.
+#   2. El backend (Node + Express) como servicio web desde el Dockerfile.
+#   3. El frontend (React) como sitio estatico.
+#
+# ANTES DE DESPLEGAR, revisar los dos valores marcados con "AJUSTAR":
+#   - CORS_ORIGENES
+#   - VITE_API_URL
+# Deben coincidir con los nombres que Render asigne a los servicios.
+# =====================================================================
+
+databases:
+  - name: sistema-tickets-db
+    databaseName: tickets_db
+    user: tickets_user
+    plan: free
+    region: oregon
+
+services:
+  # -------------------------------------------------------------------
+  # BACKEND
+  # -------------------------------------------------------------------
+  - type: web
+    name: sistema-tickets-api
+    runtime: docker
+    plan: free
+    region: oregon
+    # rootDir hace que el contexto de build sea backend/, asi el Dockerfile
+    # existente funciona sin cambios (copia package.json, src y scripts).
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/salud
+    # El contenedor arranca con PORT=4000, pero Render inyecta su propio
+    # PORT y la aplicacion lo respeta porque lee process.env.PORT.
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Se genera automaticamente un secreto largo. No se guarda en el repo.
+      - key: JWT_SECRETO
+        generateValue: true
+      - key: JWT_EXPIRA_EN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRA_EN
+        value: 7d
+
+      # Conexion a la base creada arriba.
+      - key: DB_HOST
+        fromDatabase:
+          name: sistema-tickets-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: sistema-tickets-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: sistema-tickets-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: sistema-tickets-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: sistema-tickets-db
+          property: password
+      - key: DB_POOL_MAX
+        value: "10"
+      # Render exige TLS en las conexiones a su PostgreSQL gestionado.
+      - key: DB_SSL
+        value: "true"
+
+      # AJUSTAR si el servicio del frontend tiene otro nombre.
+      - key: CORS_ORIGENES
+        value: https://sistema-tickets-web.onrender.com
+
+      # Almacenamiento de evidencias en Cloudinary.
+      # Las credenciales NO van en el repo: Render las pide al crear el
+      # blueprint (sync: false) y las guarda cifradas.
+      - key: STORAGE_DRIVER
+        value: cloudinary
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: sistema-tickets
+
+      # Notificaciones: vacias = modo consola (no gasta creditos y no
+      # falla la demo si el proveedor no responde).
+      - key: SMTP_HOST
+        value: ""
+      - key: SMTP_FROM
+        value: no-responder@sistema-tickets.local
+
+      - key: TZ
+        value: America/Mexico_City
+
+  # -------------------------------------------------------------------
+  # FRONTEND (sitio estatico)
+  # -------------------------------------------------------------------
+  - type: web
+    name: sistema-tickets-web
+    runtime: static
+    # Los sitios estaticos se sirven por CDN: no llevan plan ni region.
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    # React Router: cualquier ruta que no sea un archivo se resuelve con
+    # index.html, o al recargar en /tickets/123 daria 404.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # AJUSTAR si el servicio del backend tiene otro nombre.
+      # Se incrusta en el bundle durante el build: si cambia, hay que
+      # volver a desplegar el frontend.
+      - key: VITE_API_URL
+        value: https://sistema-tickets-api.onrender.com/api/v1

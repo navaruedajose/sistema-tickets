@@ -1,0 +1,92 @@
+{
+  "escenario": "mixto",
+  "perfil": "local",
+  "urlBase": "http://host.docker.internal:4000/api/v1",
+  "fecha": "2026-09-23T00:22:42.259Z",
+  "rendimiento": {
+    "peticionesTotales": 2861,
+    "duracionPromedioMs": 9.42,
+    "duracionP95Ms": 8.48,
+    "duracionP99Ms": 239.44,
+    "duracionMaximaMs": 265.27
+  },
+  "creacionDeTickets": {
+    "duracionPromedioMs": 10.03,
+    "duracionP95Ms": 12.9,
+    "tasaDeAceptacion": 100,
+    "ticketsCreados": 163
+  },
+  "listadoDeTickets": {
+    "duracionPromedioMs": 7.57,
+    "duracionP95Ms": 9
+  },
+  "defensas": {
+    "respuestas429": 0,
+    "respuestas400": 0,
+    "errores5xx": 0
+  },
+  "verificaciones": {
+    "pasaron": 4730,
+    "fallaron": 0
+  },
+  "umbrales": [
+    {
+      "umbral": "http_req_duration p(95)<2500",
+      "estadistico": "p(95)",
+      "valor": 8.4754,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "http_req_duration p(99)<15000",
+      "estadistico": "p(99)",
+      "valor": 239.4434,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "http_req_failed rate<0.01",
+      "estadistico": "rate",
+      "valor": 0,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_duracion p(95)<2000",
+      "estadistico": "p(95)",
+      "valor": 12.9,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_duracion p(99)<6000",
+      "estadistico": "p(99)",
+      "valor": 67.22,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "creacion_ticket_exito rate>0.90",
+      "estadistico": "rate",
+      "valor": 1,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "errores_5xx_total count==0",
+      "estadistico": "count",
+      "valor": 0,
+      "cumple": true,
+      "sinDatos": false
+    },
+    {
+      "umbral": "listado_tickets_duracion p(95)<500",
+      "estadistico": "p(95)",
+      "valor": 9,
+      "cumple": true,
+      "sinDatos": false
+    }
+  ],
+  "umbralesIncumplidos": 0,
+  "umbralesSinDatos": 0
+}

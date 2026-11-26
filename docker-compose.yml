@@ -1,0 +1,188 @@
+# =====================================================================
+# SISTEMA DE TICKETS - Orquestacion local
+# Uso:
+#   cp .env.example .env          # y definir JWT_SECRETO
+#   docker compose up -d --build
+#   docker compose exec backend npm run db:seed
+#
+#   Aplicacion web: http://localhost:5173
+#   API:            http://localhost:4000/api/v1
+#   Salud:          http://localhost:4000/api/v1/salud
+#   Adminer:        docker compose --profile herramientas up -d adminer
+#   Pruebas:        docker compose --profile pruebas run --rm pruebas
+# =====================================================================
+name: sistema-tickets
+
+services:
+  # -------------------------------------------------------------------
+  # Base de datos PostgreSQL
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tickets_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tickets_db}
+      POSTGRES_USER: ${POSTGRES_USER:-tickets_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tickets_pass}
+      TZ: ${TZ:-America/Mexico_City}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Los .sql de esta carpeta solo se ejecutan si el volumen esta vacio.
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tickets_user} -d ${POSTGRES_DB:-tickets_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - tickets_net
+
+  # -------------------------------------------------------------------
+  # Backend Node.js / Express
+  # -------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: tickets_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      # Dentro de la red de Docker el host de la BD es el nombre del servicio.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-tickets_db}
+      DB_USER: ${POSTGRES_USER:-tickets_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-tickets_pass}
+      # Tamano del pool de conexiones. Es el PRIMER cuello de botella
+      # bajo carga: con 10 conexiones y 100 usuarios concurrentes,
+      # las peticiones hacen cola esperando una conexion libre.
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      JWT_SECRETO: ${JWT_SECRETO:?Define JWT_SECRETO en el archivo .env}
+      JWT_EXPIRA_EN: ${JWT_EXPIRA_EN:-15m}
+      JWT_REFRESH_EXPIRA_EN: ${JWT_REFRESH_EXPIRA_EN:-7d}
+      CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:5173}
+      UPLOAD_DIR: /app/uploads
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-10}
+      # Almacenamiento de evidencias. Con las credenciales vacias se usa el
+      # volumen local; con credenciales, las fotos van a Cloudinary y el
+      # volumen deja de ser necesario para conservarlas.
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-auto}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-sistema-tickets}
+      # Limites de tasa. Los contadores viven en memoria del proceso, asi que
+      # `docker compose restart backend` los reinicia a cero.
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-10}
+      RATE_LIMIT_COSTOSAS_MAX: ${RATE_LIMIT_COSTOSAS_MAX:-20}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-no-responder@sistema-tickets.local}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      TZ: ${TZ:-America/Mexico_City}
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      # Persistimos evidencias y reportes generados fuera del contenedor.
+      - uploads_data:/app/uploads
+      - reports_data:/app/reports
+    networks:
+      - tickets_net
+
+  # -------------------------------------------------------------------
+  # Frontend React + Vite + Tailwind, servido por nginx.
+  # nginx hace de proxy inverso: /api/ -> http://backend:4000
+  # -------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Se deja RELATIVA a proposito: nginx reenvia /api/ al backend.
+        # Asi la imagen es identica en local y en la nube.
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    container_name: tickets_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    networks:
+      - tickets_net
+
+  # -------------------------------------------------------------------
+  # Herramienta opcional: Adminer para inspeccionar la BD desde el navegador
+  # Acceso: http://localhost:8080
+  # -------------------------------------------------------------------
+  adminer:
+    image: adminer:4
+    container_name: tickets_adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    networks:
+      - tickets_net
+    profiles:
+      - herramientas
+
+  # -------------------------------------------------------------------
+  # Suite de pruebas automatizadas (perfil `pruebas`).
+  #
+  # NO forma parte del stack normal: la imagen de produccion no lleva Jest
+  # a proposito. Este servicio se construye desde la etapa `pruebas` del
+  # Dockerfile, que si instala las dependencias de desarrollo.
+  #
+  # Las 47 pruebas corren SIN base de datos: inyectan dobles que cumplen el
+  # mismo contrato que los repositorios reales. Por eso este servicio no
+  # depende de `postgres`.
+  #
+  # Uso:  docker compose --profile pruebas run --rm pruebas
+  # -------------------------------------------------------------------
+  pruebas:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: pruebas
+    container_name: tickets_pruebas
+    environment:
+      NODE_ENV: test
+      TZ: ${TZ:-America/Mexico_City}
+    networks:
+      - tickets_net
+    profiles:
+      - pruebas
+
+volumes:
+  postgres_data:
+    name: tickets_postgres_data
+  uploads_data:
+    name: tickets_uploads_data
+  reports_data:
+    name: tickets_reports_data
+
+networks:
+  tickets_net:
+    name: tickets_net
+    driver: bridge

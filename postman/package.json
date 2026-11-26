@@ -1,0 +1,13 @@
+{
+  "name": "sistema-tickets-postman",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ejecutor de la coleccion Postman del Sistema de Tickets, carpeta por carpeta",
+  "scripts": {
+    "ejecutar": "node ejecutar-coleccion.js",
+    "ejecutar:nube": "node ejecutar-coleccion.js --nube"
+  },
+  "devDependencies": {
+    "newman": "^6.2.1"
+  }
+}

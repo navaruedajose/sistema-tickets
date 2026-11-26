@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================================
+   Estilos base
+   ===================================================================== */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-800 antialiased;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  /* Anillo de foco visible: requisito de accesibilidad para navegacion
+     por teclado. Se aplica de forma consistente en toda la aplicacion. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-marca-500 ring-offset-2 ring-offset-white;
+  }
+}
+
+/* =====================================================================
+   Componentes reutilizables
+   Definidos aqui (y no repetidos en cada pagina) para respetar DRY.
+   ===================================================================== */
+@layer components {
+  /* --- Botones --- */
+  .boton {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
+           text-sm font-semibold transition-colors
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .boton-primario {
+    @apply boton bg-marca-700 text-white hover:bg-marca-800
+           active:bg-marca-900;
+  }
+
+  .boton-secundario {
+    @apply boton border border-slate-300 bg-white text-slate-700
+           hover:bg-slate-50 active:bg-slate-100;
+  }
+
+  .boton-peligro {
+    @apply boton bg-rose-600 text-white hover:bg-rose-700;
+  }
+
+  .boton-fantasma {
+    @apply boton text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  .boton-pequeno {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  /* --- Formularios --- */
+  .campo {
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2
+           text-sm text-slate-800 placeholder-slate-400
+           focus:border-marca-500 focus:outline-none focus:ring-1 focus:ring-marca-500
+           disabled:bg-slate-100 disabled:text-slate-500;
+  }
+
+  .etiqueta-campo {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+
+  .texto-ayuda {
+    @apply mt-1 text-xs text-slate-500;
+  }
+
+  .texto-error {
+    @apply mt-1 text-xs font-medium text-rose-600;
+  }
+
+  /* --- Tarjetas y contenedores --- */
+  .tarjeta {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .tarjeta-encabezado {
+    @apply flex items-center justify-between border-b border-slate-200 px-5 py-4;
+  }
+
+  .tarjeta-titulo {
+    @apply text-base font-semibold text-slate-800;
+  }
+
+  .tarjeta-cuerpo {
+    @apply p-5;
+  }
+
+  /* --- Tablas --- */
+  .tabla {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .tabla thead th {
+    @apply whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3
+           text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .tabla tbody td {
+    @apply border-b border-slate-100 px-4 py-3 align-middle text-slate-700;
+  }
+
+  .tabla tbody tr:hover {
+    @apply bg-slate-50;
+  }
+
+  /* --- Insignias (estados y prioridades) --- */
+  .insignia {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full
+           px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* --- Enlaces --- */
+  .enlace {
+    @apply font-medium text-marca-700 underline-offset-2 hover:underline;
+  }
+}
+
+/* =====================================================================
+   Utilidades
+   ===================================================================== */
+@layer utilities {
+  /* Oculta la barra de desplazamiento conservando el desplazamiento. */
+  .sin-barra {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .sin-barra::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Barra de desplazamiento discreta para los paneles con scroll interno. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+  background-clip: content-box;
+}
+
+/* Respeta la preferencia del usuario de reducir animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Al imprimir, se ocultan los elementos de navegacion. */
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+}
