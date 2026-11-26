@@ -51,8 +51,11 @@ USER api
 EXPOSE 4000
 
 # Healthcheck contra el endpoint de salud del propio servicio.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:4000/api/v1/salud || exit 1
+# Se usa ${PORT:-4000} porque en la nube el proveedor inyecta su propio
+# puerto (Render usa 10000): con el 4000 fijo el contenedor se marcaria
+# como enfermo aunque estuviera escuchando bien.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-4000}/api/v1/vivo" || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "src/server.js"]

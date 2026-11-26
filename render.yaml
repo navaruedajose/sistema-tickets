@@ -35,7 +35,11 @@ services:
     # existente funciona sin cambios (copia package.json, src y scripts).
     rootDir: backend
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /api/v1/salud
+    # Se usa /vivo y no /salud a proposito: /salud consulta la base de datos,
+    # asi que un pico de latencia de PostgreSQL haria fallar el despliegue
+    # aunque el proceso estuviera perfectamente arriba. /vivo solo confirma
+    # que el servidor escucha, que es lo que Render necesita para enrutar.
+    healthCheckPath: /api/v1/vivo
     # El contenedor arranca con PORT=4000, pero Render inyecta su propio
     # PORT y la aplicacion lo respeta porque lee process.env.PORT.
     envVars:

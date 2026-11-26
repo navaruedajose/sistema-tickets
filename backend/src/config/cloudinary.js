@@ -38,12 +38,15 @@ const credencialesCompletas = Boolean(cloudName && apiKey && apiSecret);
 // exige credenciales; 'auto' usa Cloudinary solo si estan completas.
 const estaHabilitado = credencialesCompletas && modo !== 'local';
 
-// Si se pidio explicitamente Cloudinary, fallar al arrancar es mejor que
-// descubrir en plena demo que las fotos se estaban guardando en disco.
+// Si se pidio explicitamente Cloudinary pero faltan credenciales, se avisa
+// y se cae a disco. Abortar el arranque dejaria el servicio caido por una
+// variable mal copiada, que es peor que guardar en un disco efimero: la
+// aplicacion sigue funcionando y el problema queda visible en el log.
 if (modo === 'cloudinary' && !credencialesCompletas) {
-  throw new Error(
-    '[config] STORAGE_DRIVER=cloudinary exige CLOUDINARY_CLOUD_NAME, ' +
-      'CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.'
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[cloudinary] STORAGE_DRIVER=cloudinary pero faltan CLOUDINARY_CLOUD_NAME, ' +
+      'CLOUDINARY_API_KEY o CLOUDINARY_API_SECRET. Se usara el disco local.'
   );
 }
 
